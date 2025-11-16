@@ -124,7 +124,7 @@ class ImageViewer:
         print("=" * cols)
         print(f"📷 [{self.current_index + 1}/{len(self.image_paths)}] {self.image_names[self.current_index]}")
         print(
-            "Controls: p/n prev/next | +/- zoom | arrows & j/k/l/; pan | ENTER/SPACE print path | q quit"
+            "Controls: n/p next/prev | +/- zoom | hjkl pan | ENTER/SPACE print path | q quit"
         )
         print("=" * cols)
     
@@ -229,7 +229,7 @@ class ImageViewer:
         if key in ('\r', '\n', ' '):  # Enter or Space
             return "print_path"
         
-        # Previous / Next image
+        # Previous / Next image (n/p)
         if key in ('n', 'N'):
             self._navigate_next()
             self._reset_view_state()
@@ -247,17 +247,17 @@ class ImageViewer:
             self._zoom(1/1.2)
             return None
 
-        # Pan with arrows or j/k/l/;
+        # Pan with hjkl (vim-style)
         if key in ('\x1b[A', 'k', 'K'):  # up
             self._pan(0, -1)
             return None
         if key in ('\x1b[B', 'j', 'J'):  # down
             self._pan(0, 1)
             return None
-        if key in ('\x1b[D', 'l', 'L'):  # left
+        if key in ('\x1b[D', 'h', 'H'):  # left
             self._pan(-1, 0)
             return None
-        if key in ('\x1b[C', ';', ':'):  # right
+        if key in ('\x1b[C', 'l', 'L'):  # right
             self._pan(1, 0)
             return None
         

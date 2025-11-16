@@ -1,5 +1,6 @@
 """Main image viewer TUI implementation."""
 
+import sys
 from typing import List, Optional
 
 from .terminal import TerminalHelper
@@ -13,7 +14,7 @@ class ImageViewer:
     
     # UI layout constants
     HEADER_LINES = 4  # separator + title + controls + separator
-    FOOTER_LINES = 2  # separator + status
+    FOOTER_LINES = 0  # No footer
     
     def __init__(self, image_paths: List[str], image_names: Optional[List[str]] = None):
         """
@@ -77,31 +78,41 @@ class ImageViewer:
             print("No images to display.")
             return
         
-        while True:
-            # Get current terminal info
-            term_info = TerminalHelper.get_terminal_info()
-            
-            # Clear and redraw
+        # Enter alternate screen buffer and hide cursor
+        sys.stdout.write('\x1b[?1049h')  # Enable alternate screen
+        sys.stdout.write('\x1b[?25l')     # Hide cursor
+        sys.stdout.flush()
+        
+        try:
+            while True:
+                # Get current terminal info
+                term_info = TerminalHelper.get_terminal_info()
+                
+                # Clear and redraw
+                TerminalHelper.clear_screen()
+                
+                # Display UI
+                self._display_header(term_info.columns)
+                self._display_current_image(term_info)
+                
+                # Get user input
+                key = TerminalHelper.get_key_input()
+                
+                # Handle key press
+                action = self._handle_key(key)
+                
+                if action == "quit":
+                    break
+                elif action == "print_path":
+                    # Exit to print path
+                    print(self.image_paths[self.current_index])
+                    break
+        finally:
+            # Restore cursor and exit alternate screen
+            sys.stdout.write('\x1b[?25h')     # Show cursor
+            sys.stdout.write('\x1b[?1049l')   # Disable alternate screen
             TerminalHelper.clear_screen()
-            
-            # Display UI
-            self._display_header(term_info.columns)
-            self._display_current_image(term_info)
-            self._display_footer(term_info.columns)
-            
-            # Get user input
-            key = TerminalHelper.get_key_input()
-            
-            # Handle key press
-            action = self._handle_key(key)
-            
-            if action == "quit":
-                TerminalHelper.clear_screen()
-                break
-            elif action == "print_path":
-                TerminalHelper.clear_screen()
-                print(self.image_paths[self.current_index])
-                break
+            sys.stdout.flush()
     
     def _display_header(self, cols: int):
         """
@@ -117,15 +128,6 @@ class ImageViewer:
         )
         print("=" * cols)
     
-    def _display_footer(self, cols: int):
-        """
-        Display the footer with status.
-        
-        Args:
-            cols: Terminal width in columns
-        """
-        print("=" * cols)
-    
     def _display_current_image(self, term_info):
         """
         Display the current image centered in the terminal.
@@ -137,7 +139,8 @@ class ImageViewer:
         image_bytes = self.cache.load(self.current_index)
         
         # Calculate available space in rows/cols
-        available_rows = max(1, term_info.rows - self.HEADER_LINES - self.FOOTER_LINES)
+        # Reserve 1 row at bottom to prevent Kitty cursor advancement from causing overflow
+        available_rows = max(1, term_info.rows - self.HEADER_LINES - 1)
         available_cols = max(1, term_info.columns)
         
         # Image dimensions in pixels
@@ -177,21 +180,25 @@ class ImageViewer:
         self.pan_y = max(0, min(self.pan_y, max_pan_y))
         
         # Convert display pixels to terminal cells, being careful with rounding
-        image_cols = max(1, min(available_cols, disp_w_px // max(1, term_info.cell_width)))
-        image_rows = max(1, min(available_rows, disp_h_px // max(1, term_info.cell_height)))
+        # Use floor division to ensure we never exceed available space
+        image_cols = min(available_cols, disp_w_px // max(1, term_info.cell_width))
+        image_rows = min(available_rows, disp_h_px // max(1, term_info.cell_height))
+        
+        # Ensure at least 1 cell
+        image_cols = max(1, image_cols)
+        image_rows = max(1, image_rows)
         
         # Calculate centering offsets in cells (which row/col to start at)
         col_offset = max(0, (available_cols - image_cols) // 2)
         row_offset = max(0, (available_rows - image_rows) // 2)
         
-        # Move cursor to starting position (accounting for header)
-        # Move down by row_offset rows after the header
-        for _ in range(row_offset):
-            print()
+        # Calculate absolute row position from top of screen
+        # After header (HEADER_LINES) + row_offset = where image starts
+        image_start_row = self.HEADER_LINES + row_offset + 1  # +1 because rows are 1-indexed
         
-        # Move cursor right by col_offset columns using spaces
-        if col_offset > 0:
-            print(' ' * col_offset, end='')
+        # Position cursor at exact row and column using absolute positioning
+        sys.stdout.write(f'\x1b[{image_start_row};{col_offset + 1}H')
+        sys.stdout.flush()
         
         # Display cropped+scaled image via Kitty at current cursor position
         KittyGraphicsProtocol.display_image(

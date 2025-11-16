@@ -88,6 +88,5 @@ class KittyGraphicsProtocol:
             sys.stdout.write(f"\x1b_G{control_data};{chunk}\x1b\\")
             sys.stdout.flush()
         
-        # Print a newline to move the cursor below the image
-        print()
+        # Don't add extra newline - let caller control cursor position
         sys.stdout.flush()

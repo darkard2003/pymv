@@ -145,9 +145,30 @@ class ImageViewer:
         if img_w <= 0 or img_h <= 0:
             return
         
-        # Compute source rectangle from zoom/pan
-        src_w = max(1, int(img_w / max(1e-6, self.zoom)))
-        src_h = max(1, int(img_h / max(1e-6, self.zoom)))
+        # Compute max pixels available
+        max_w_px = available_cols * term_info.cell_width
+        max_h_px = available_rows * term_info.cell_height
+        
+        # First, compute the "fit to screen" scale (what makes the full image fit)
+        fit_scale = min(max_w_px / img_w, max_h_px / img_h)
+        
+        # Apply zoom on top of the fit scale
+        # zoom=1.0 means "fit to screen"
+        # zoom=2.0 means "2x the fit size" (magnified)
+        effective_scale = fit_scale * self.zoom
+        
+        # Compute desired display size based on effective scale
+        desired_w_px = int(img_w * effective_scale)
+        desired_h_px = int(img_h * effective_scale)
+        
+        # Clamp width and height independently to terminal boundaries
+        disp_w_px = max(1, min(desired_w_px, max_w_px))
+        disp_h_px = max(1, min(desired_h_px, max_h_px))
+        
+        # The source rectangle represents what portion of the image we display
+        # Compute source dimensions based on what actually fits
+        src_w = max(1, min(img_w, int(disp_w_px / effective_scale)))
+        src_h = max(1, min(img_h, int(disp_h_px / effective_scale)))
         
         # Clamp pan so source rect stays within the image
         max_pan_x = max(0, img_w - src_w)
@@ -155,29 +176,27 @@ class ImageViewer:
         self.pan_x = max(0, min(self.pan_x, max_pan_x))
         self.pan_y = max(0, min(self.pan_y, max_pan_y))
         
-        # Compute display size maintaining source aspect
-        max_w_px = available_cols * term_info.cell_width
-        max_h_px = available_rows * term_info.cell_height
-        scale = min(max_w_px / src_w, max_h_px / src_h)
-        disp_w_px = max(1, int(src_w * scale))
-        disp_h_px = max(1, int(src_h * scale))
-        image_cols = max(1, min(available_cols, (disp_w_px + term_info.cell_width - 1) // max(1, term_info.cell_width)))
-        image_rows = max(1, min(available_rows, (disp_h_px + term_info.cell_height - 1) // max(1, term_info.cell_height)))
+        # Convert display pixels to terminal cells, being careful with rounding
+        image_cols = max(1, min(available_cols, disp_w_px // max(1, term_info.cell_width)))
+        image_rows = max(1, min(available_rows, disp_h_px // max(1, term_info.cell_height)))
         
-        # Center by computing padding in cells
-        padding_rows = max(0, available_rows - image_rows)
-        top_padding = padding_rows // 2
-        padding_cols = max(0, term_info.columns - image_cols)
-        left_padding = padding_cols // 2
+        # Calculate centering offsets in cells (which row/col to start at)
+        col_offset = max(0, (available_cols - image_cols) // 2)
+        row_offset = max(0, (available_rows - image_rows) // 2)
         
-        # Add top padding (move cursor down by rows)
-        for _ in range(top_padding):
+        # Move cursor to starting position (accounting for header)
+        # Move down by row_offset rows after the header
+        for _ in range(row_offset):
             print()
         
-        # Display cropped+scaled image via Kitty
+        # Move cursor right by col_offset columns using spaces
+        if col_offset > 0:
+            print(' ' * col_offset, end='')
+        
+        # Display cropped+scaled image via Kitty at current cursor position
         KittyGraphicsProtocol.display_image(
             image_bytes,
-            left_padding=left_padding,
+            left_padding=0,  # No padding, we positioned cursor already
             columns=image_cols,
             rows=image_rows,
             src_x=self.pan_x,

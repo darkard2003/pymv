@@ -12,28 +12,24 @@ class KittyGraphicsProtocol:
     @staticmethod
     def display_image(
         image_bytes: bytes,
-        left_padding: int = 0,
         columns: int | None = None,
         rows: int | None = None,
         src_x: int | None = None,
         src_y: int | None = None,
         src_w: int | None = None,
         src_h: int | None = None,
-        x_offset: int | None = None,
-        y_offset: int | None = None,
-        z_index: int | None = None,
     ):
         """
         Display an image using Kitty graphics protocol with optional sizing and placement.
         
         Args:
             image_bytes: PNG image data as bytes
-            left_padding: Number of spaces to print before the image (for centering by cells)
             columns: Desired width in terminal columns (c)
             rows: Desired height in terminal rows (r)
-            x_offset: Pixel offset within the starting cell on X axis (X)
-            y_offset: Pixel offset within the starting cell on Y axis (Y)
-            z_index: Z-index for stacking order (z)
+            src_x: Source rectangle X position (x)
+            src_y: Source rectangle Y position (y)
+            src_w: Source rectangle width (w)
+            src_h: Source rectangle height (h)
         """
         # Encode the image data into Base64
         b64_data = base64.b64encode(image_bytes).decode('ascii')
@@ -43,10 +39,6 @@ class KittyGraphicsProtocol:
             b64_data[i:i + KittyGraphicsProtocol.CHUNK_SIZE]
             for i in range(0, len(b64_data), KittyGraphicsProtocol.CHUNK_SIZE)
         ]
-        
-        # Add left padding spaces before image (shifts start cell horizontally)
-        if left_padding and left_padding > 0:
-            sys.stdout.write(' ' * left_padding)
         
         # Transmit the data using the Kitty protocol
         for i, chunk in enumerate(chunks):
@@ -69,12 +61,6 @@ class KittyGraphicsProtocol:
                     payload['w'] = int(src_w)
                 if src_h is not None:
                     payload['h'] = int(src_h)
-                if x_offset is not None:
-                    payload['X'] = int(x_offset)
-                if y_offset is not None:
-                    payload['Y'] = int(y_offset)
-                if z_index is not None:
-                    payload['z'] = int(z_index)
             
             if i == len(chunks) - 1:
                 # Last chunk must have m=0 to signal the end

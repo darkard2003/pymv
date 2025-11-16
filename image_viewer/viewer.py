@@ -196,7 +196,6 @@ class ImageViewer:
         # Display cropped+scaled image via Kitty at current cursor position
         KittyGraphicsProtocol.display_image(
             image_bytes,
-            left_padding=0,  # No padding, we positioned cursor already
             columns=image_cols,
             rows=image_rows,
             src_x=self.pan_x,
@@ -275,22 +274,15 @@ class ImageViewer:
 
     def _zoom(self, factor: float):
         """Apply multiplicative zoom, clamped to sensible range."""
-        old_zoom = self.zoom
         self.zoom = max(1.0, min(8.0, self.zoom * factor))
-        if self.zoom != old_zoom:
-            # Optionally recenter by keeping pan around current center
-            pass
-
-        # Clamp pan will happen during draw
 
     def _pan(self, dx: int, dy: int):
         """Pan by a step relative to current zoom (in pixels)."""
-        # Estimate step as 10% of current source rect
-        # Determine image size to scale step
+        # Pan step is 10% of the current visible source rectangle
         img_bytes = self.cache.load(self.current_index)
         img_w, img_h = ImageProcessor.get_image_dimensions(img_bytes)
-        src_w = max(1, int(img_w / max(1e-6, self.zoom)))
-        src_h = max(1, int(img_h / max(1e-6, self.zoom)))
+        src_w = int(img_w / self.zoom)
+        src_h = int(img_h / self.zoom)
         step_x = max(1, src_w // 10)
         step_y = max(1, src_h // 10)
         self.pan_x += dx * step_x
